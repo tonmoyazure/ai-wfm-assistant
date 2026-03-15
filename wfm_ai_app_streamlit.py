@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 
+st.title("AI Workforce Assistant - Version 2")
+
 st.title("AI Workforce Assistant")
 
 df = pd.read_csv("workforce_data.csv")
