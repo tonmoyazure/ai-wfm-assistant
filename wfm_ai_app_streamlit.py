@@ -6,6 +6,8 @@ from openai import OpenAI
 # Read API key from environment variable
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+st.write("API Key Loaded:", os.getenv("OPENAI_API_KEY") is not None)
+
 st.title("AI Workforce Assistant")
 
 df = pd.read_csv("workforce_data.csv")
