@@ -1,0 +1,6 @@
+Employee,Department,HoursWorked,OvertimeHours,Skill
+John,Warehouse,44,4,Forklift
+Maria,Retail,38,0,Cashier
+David,Warehouse,46,6,Forklift
+Lisa,Retail,35,0,Cashier
+Mark,Logistics,42,2,Driver
