@@ -8,71 +8,65 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.title("AI Workforce Copilot")
 
-# Load workforce data
+# Load data
 df = pd.read_csv("workforce_data.csv")
 
 st.subheader("Workforce Data")
 st.dataframe(df)
 
-# User question
 question = st.text_input("Ask a workforce question")
 
 if st.button("Ask AI") and question:
 
-    st.write("Generating query using AI...")
-
     try:
 
-        # Step 1: Ask LLM to generate Pandas query
-        query_prompt = f"""
+        # Ask AI to generate Pandas query
+        prompt = f"""
         You are a Python data analyst.
 
         The dataframe name is df.
 
-        Columns available:
+        Available columns:
         {list(df.columns)}
 
         Generate ONLY a Pandas query to answer the question.
-
-        Example:
-        Question: Who worked more than 40 hours?
-        Query: df[df["Hours"] > 40]
+        Do NOT include markdown or explanation.
 
         Question:
         {question}
-
-        Return ONLY the Pandas query.
         """
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": query_prompt}]
+            messages=[{"role": "user", "content": prompt}]
         )
 
         query = response.choices[0].message.content.strip()
 
-        st.subheader("Generated Pandas Query")
-        st.code(query)
+        # Remove markdown if AI adds it
+        query = query.replace("```python", "").replace("```", "").strip()
 
-        # Step 2: Execute query
+        # Execute query silently
         result = eval(query)
 
-        st.subheader("Query Result")
-        st.write(result)
-
-        # Step 3: Ask AI to explain result
-        explanation_prompt = f"""
-        Explain this workforce analytics result in simple terms:
+        # Ask AI to explain result
+        explain_prompt = f"""
+        A workforce analytics query returned this result:
 
         {result}
+
+        Answer the user's question clearly and concisely.
+
+        Question:
+        {question}
         """
 
         explanation = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": explanation_prompt}]
+            messages=[{"role": "user", "content": explain_prompt}]
         )
 
-        st.subheader("AI Explanation")
+        st.subheader("AI Answer")
         st.write(explanation.choices[0].message.content)
 
     except Exception as e:
