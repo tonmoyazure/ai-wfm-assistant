@@ -4,31 +4,39 @@ import pandas as pd
 import random
 from openai import OpenAI
 
-# ------------------------------
-# Initialize OpenAI client
-# ------------------------------
+# ----------------------------
+# OpenAI client
+# ----------------------------
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.set_page_config(page_title="AI Workforce Copilot", layout="wide")
-st.title("AI Workforce Copilot - Chat Interface with CSV / Simulator")
+st.title("AI Workforce Copilot")
 
-# ------------------------------
+# ----------------------------
 # Workforce Simulator
-# ------------------------------
+# ----------------------------
 def simulate_workforce(n_employees=500):
-    first_names = ["John", "Maria", "David", "Lisa", "Mark", "Sophia", "Daniel", "Emma", "Michael", "Olivia"]
-    last_names = ["Smith", "Johnson", "Brown", "Lee", "Garcia", "Martinez", "Taylor", "Anderson", "Thomas", "Wilson"]
-    departments = ["Sales", "Support", "Operations", "IT", "HR", "Finance"]
-    shifts = ["Morning", "Evening", "Night"]
+
+    first_names = ["John","Maria","David","Lisa","Mark","Sophia","Daniel","Emma","Michael","Olivia"]
+    last_names = ["Smith","Johnson","Brown","Lee","Garcia","Martinez","Taylor","Anderson","Thomas","Wilson"]
+
+    departments = ["Sales","Support","Operations","IT","HR","Finance"]
+    shifts = ["Morning","Evening","Night"]
 
     data = []
-    for i in range(1, n_employees + 1):
+
+    for i in range(1, n_employees+1):
+
         name = f"{random.choice(first_names)} {random.choice(last_names)}"
         dept = random.choice(departments)
-        scheduled_hours = random.randint(35, 45)
-        actual_hours = scheduled_hours + random.randint(-5, 10)
-        overtime = max(0, actual_hours - 40)
-        absent_days = random.randint(0, 2)
+
+        scheduled_hours = random.randint(35,45)
+        actual_hours = scheduled_hours + random.randint(-5,10)
+
+        overtime = max(0, actual_hours-40)
+
+        absent_days = random.randint(0,2)
+
         shift = random.choice(shifts)
 
         data.append({
@@ -44,111 +52,159 @@ def simulate_workforce(n_employees=500):
 
     df = pd.DataFrame(data)
 
-    # Staffing shortages per department
-    dept_summary = df.groupby("Department").apply(lambda x: sum(x["ScheduledHours"] - x["ActualHours"])).reset_index()
-    dept_summary.columns = ["Department", "StaffingShortage"]
+    # staffing shortage per department
+    dept_summary = df.groupby("Department").apply(
+        lambda x: sum(x["ScheduledHours"]-x["ActualHours"])
+    ).reset_index()
+
+    dept_summary.columns = ["Department","StaffingShortage"]
+
     df = df.merge(dept_summary, on="Department", how="left")
+
     return df
 
-# ------------------------------
-# Load Data
-# ------------------------------
-st.sidebar.header("Data Options")
-use_csv = st.sidebar.checkbox("Upload CSV file instead of simulator", value=False)
+
+# ----------------------------
+# Data Source Selection
+# ----------------------------
+st.sidebar.header("Data Source")
+
+use_csv = st.sidebar.checkbox("Upload CSV instead of simulator")
 
 if use_csv:
+
     uploaded_file = st.sidebar.file_uploader("Upload workforce CSV", type="csv")
+
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        st.subheader("Uploaded Workforce Data (sample 10 rows)")
-        st.dataframe(df.sample(10))
+
+        st.subheader("Uploaded Workforce Data (Sample)")
+        st.dataframe(df.head(10))
+
     else:
-        st.warning("Upload a CSV file or disable CSV option to use simulator.")
+        st.warning("Upload a CSV file")
         st.stop()
+
 else:
-    df = simulate_workforce(n_employees=500)
-    st.subheader("Simulated Workforce Data (sample 10 rows)")
+
+    df = simulate_workforce(500)
+
+    st.subheader("Simulated Workforce Data (Sample)")
     st.dataframe(df.sample(10))
 
-# ------------------------------
-# Initialize session chat memory
-# ------------------------------
+
+# ----------------------------
+# Chat Memory
+# ----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat conversation
-chat_placeholder = st.container()
-with chat_placeholder:
-    for message in st.session_state.messages:
-        if message["role"] == "user":
-            st.markdown(f"<div style='text-align:right; background-color:#DCF8C6; padding:8px; border-radius:8px; margin:4px;'>{message['content']}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div style='text-align:left; background-color:#F1F0F0; padding:8px; border-radius:8px; margin:4px;'>{message['content']}</div>", unsafe_allow_html=True)
 
-# ------------------------------
-# Chat input
-# ------------------------------
-question = st.text_input("Ask a workforce question here...")
+# Display previous chat
+for message in st.session_state.messages:
 
-if st.button("Send") and question:
-    st.session_state.messages.append({"role": "user", "content": question})
-    st.experimental_rerun()  # refresh to show user message
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
-# ------------------------------
-# AI response
-# ------------------------------
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    question = st.session_state.messages[-1]["content"]
 
-    with st.spinner("AI is analyzing workforce data..."):
-        try:
-            # Step 1: Generate Pandas query using conversation memory
-            query_prompt = f"""
-            You are a Python data analyst assistant.
-            The dataframe is named df with columns: {list(df.columns)}.
-            Previous conversation: {st.session_state.messages}
-            Generate ONLY a Pandas query to answer the user's latest question.
-            Do not include markdown, explanation, or comments.
-            Latest user question: {question}
-            """
+# ----------------------------
+# Chat Input
+# ----------------------------
+question = st.chat_input("Ask a workforce analytics question")
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": query_prompt}]
-            )
+if question:
 
-            query = response.choices[0].message.content.strip()
-            query = query.replace("```python", "").replace("```", "").strip()
+    # Save user message
+    st.session_state.messages.append({
+        "role":"user",
+        "content":question
+    })
 
-            # Step 2: Execute query
-            result = eval(query)
+    with st.chat_message("user"):
+        st.write(question)
 
-            if isinstance(result, pd.DataFrame) or isinstance(result, pd.Series):
-                result_text = result.to_string(index=False)
-            else:
-                result_text = str(result)
+    with st.chat_message("assistant"):
 
-            # Step 3: Ask AI to explain result
-            explain_prompt = f"""
-            You are a workforce analytics assistant.
-            Previous conversation: {st.session_state.messages}
-            Latest result from dataframe: {result_text}
-            User question: {question}
-            Provide:
-            1. Short answer
-            2. Explanation based on the dataset
-            3. Key employees, departments, or values involved
-            """
+        with st.spinner("Analyzing workforce data..."):
 
-            explanation = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": explain_prompt}]
-            )
+            try:
 
-            answer = explanation.choices[0].message.content
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+                # ----------------------------------
+                # Step 1: Generate Pandas Query
+                # ----------------------------------
+                prompt = f"""
 
-            st.experimental_rerun()
+You are a Python data analyst.
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+The dataframe name is df.
+
+Columns:
+{list(df.columns)}
+
+Generate ONLY a Pandas query to answer the question.
+
+Do NOT include explanation or markdown.
+
+Question:
+{question}
+
+"""
+
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":prompt}]
+                )
+
+                query = response.choices[0].message.content.strip()
+
+                query = query.replace("```python","").replace("```","")
+
+                # ----------------------------------
+                # Step 2: Execute Query
+                # ----------------------------------
+                result = eval(query)
+
+                if isinstance(result,(pd.DataFrame,pd.Series)):
+                    result_text = result.to_string(index=False)
+                else:
+                    result_text = str(result)
+
+                # ----------------------------------
+                # Step 3: AI Explanation
+                # ----------------------------------
+                explain_prompt = f"""
+
+You are a workforce analytics assistant.
+
+User question:
+{question}
+
+Result from dataset:
+{result_text}
+
+Provide:
+
+1) Short answer  
+2) Explanation  
+3) Key insights
+
+"""
+
+                explanation = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":explain_prompt}]
+                )
+
+                answer = explanation.choices[0].message.content
+
+                st.write(answer)
+
+                # Save assistant response
+                st.session_state.messages.append({
+                    "role":"assistant",
+                    "content":answer
+                })
+
+            except Exception as e:
+
+                st.error(f"Error: {e}")
