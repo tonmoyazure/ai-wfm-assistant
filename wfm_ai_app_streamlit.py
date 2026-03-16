@@ -3,46 +3,77 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
-st.write("Files inside container:")
-st.write(os.listdir("."))
-
+# Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-st.write("API Key Loaded:", os.getenv("OPENAI_API_KEY") is not None)
+st.title("AI Workforce Copilot")
 
-st.title("AI Workforce Assistant")
-
+# Load workforce data
 df = pd.read_csv("workforce_data.csv")
 
+st.subheader("Workforce Data")
 st.dataframe(df)
 
+# User question
 question = st.text_input("Ask a workforce question")
 
-if st.button("Ask AI"):
+if st.button("Ask AI") and question:
+
+    st.write("Generating query using AI...")
 
     try:
-        data_text = df.to_string(index=False)
 
-        prompt = f"""
-        You are a workforce analytics assistant.
+        # Step 1: Ask LLM to generate Pandas query
+        query_prompt = f"""
+        You are a Python data analyst.
 
-        Workforce data:
-        {data_text}
+        The dataframe name is df.
 
-        Answer the question:
+        Columns available:
+        {list(df.columns)}
+
+        Generate ONLY a Pandas query to answer the question.
+
+        Example:
+        Question: Who worked more than 40 hours?
+        Query: df[df["Hours"] > 40]
+
+        Question:
         {question}
-        """
 
-        st.write("Calling OpenAI...")
+        Return ONLY the Pandas query.
+        """
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": query_prompt}]
         )
 
-        st.write("Response received from OpenAI")
+        query = response.choices[0].message.content.strip()
 
-        st.write(response.choices[0].message.content)
+        st.subheader("Generated Pandas Query")
+        st.code(query)
+
+        # Step 2: Execute query
+        result = eval(query)
+
+        st.subheader("Query Result")
+        st.write(result)
+
+        # Step 3: Ask AI to explain result
+        explanation_prompt = f"""
+        Explain this workforce analytics result in simple terms:
+
+        {result}
+        """
+
+        explanation = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": explanation_prompt}]
+        )
+
+        st.subheader("AI Explanation")
+        st.write(explanation.choices[0].message.content)
 
     except Exception as e:
-        st.error(f"Error calling OpenAI: {e}")
+        st.error(f"Error: {e}")
