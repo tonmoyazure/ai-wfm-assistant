@@ -3,75 +3,116 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
-# Initialize OpenAI client
+# Initialize OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.title("AI Workforce Copilot")
 
-# Load CSV
-df = pd.read_csv("workforce_data.csv")
+# Upload workforce data
+uploaded_file = st.file_uploader("Upload workforce data (CSV)", type="csv")
 
-st.subheader("Workforce Data")
-st.dataframe(df)
+if uploaded_file:
 
-question = st.text_input("Ask a workforce question")
+    df = pd.read_csv(uploaded_file)
 
-if st.button("Ask AI") and question:
+    st.success("Dataset uploaded successfully")
 
-    try:
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-        # Step 1: Generate Pandas query
-        query_prompt = f"""
-        You are a Python data analyst.
+    # Show chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
 
-        The dataframe name is df.
+    # Chat input
+    question = st.chat_input("Ask a workforce analytics question")
 
-        Available columns:
-        {list(df.columns)}
+    if question:
 
-        Generate ONLY a Pandas query to answer the question.
-        Do NOT include markdown or explanation.
+        # Show user message
+        st.session_state.messages.append({"role": "user", "content": question})
 
-        Question:
-        {question}
-        """
+        with st.chat_message("user"):
+            st.write(question)
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": query_prompt}]
-        )
+        with st.chat_message("assistant"):
 
-        query = response.choices[0].message.content.strip()
-        query = query.replace("```python", "").replace("```", "").strip()
+            with st.spinner("Analyzing workforce data..."):
 
-        # Step 2: Execute query
-        result = eval(query)
+                try:
 
-        # Convert result to readable text
-        if isinstance(result, pd.DataFrame) or isinstance(result, pd.Series):
-            result_text = result.to_string(index=False)
-        else:
-            result_text = str(result)
+                    # STEP 1: Generate Pandas query
+                    query_prompt = f"""
+                    You are a Python data analyst.
 
-        # Step 3: Ask AI to explain
-        explain_prompt = f"""
-        The following workforce data result was produced:
+                    Dataframe name: df
 
-        {result_text}
+                    Available columns:
+                    {list(df.columns)}
 
-        Answer the user's question clearly.
+                    Generate ONLY a Pandas query that answers the user's question.
 
-        Question:
-        {question}
-        """
+                    Do NOT include markdown.
+                    Do NOT include explanation.
 
-        explanation = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": explain_prompt}]
-        )
+                    Question:
+                    {question}
+                    """
 
-        st.subheader("AI Answer")
-        st.write(explanation.choices[0].message.content)
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": query_prompt}]
+                    )
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+                    query = response.choices[0].message.content.strip()
+                    query = query.replace("```python", "").replace("```", "").strip()
+
+                    # STEP 2: Execute query
+                    result = eval(query)
+
+                    if isinstance(result, pd.DataFrame) or isinstance(result, pd.Series):
+                        result_text = result.to_string(index=False)
+                    else:
+                        result_text = str(result)
+
+                    # STEP 3: Ask AI to explain result
+                    explain_prompt = f"""
+                    You are a workforce analytics assistant.
+
+                    The following result was produced from workforce data:
+
+                    {result_text}
+
+                    User question:
+                    {question}
+
+                    Provide the answer in this format:
+
+                    Answer:
+                    <short answer>
+
+                    Explanation:
+                    <explain why based on the data>
+
+                    Details:
+                    <mention employees, hours, or numbers from the result>
+                    """
+
+                    explanation = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": explain_prompt}]
+                    )
+
+                    answer = explanation.choices[0].message.content
+
+                    st.write(answer)
+
+                    # Save assistant message
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": answer}
+                    )
+
+                except Exception as e:
+                    st.error(f"Error: {e}")
