@@ -27,10 +27,8 @@ def simulate_workforce(n=500):
     rows = []
 
     for i in range(1,n+1):
-
         scheduled = random.randint(35,45)
         actual = scheduled + random.randint(-5,10)
-
         rows.append({
             "EmployeeID":i,
             "EmployeeName":f"{random.choice(first_names)} {random.choice(last_names)}",
@@ -45,34 +43,42 @@ def simulate_workforce(n=500):
     return pd.DataFrame(rows)
 
 # -----------------------------
-# AI Insight Engine
+# AI Insight Engine (robust)
 # -----------------------------
 def generate_ai_insights(df):
-
     insights = []
 
-    # overtime count
-    overtime_count = len(df[df["Overtime"] > 0])
-    insights.append(f"⚠ {overtime_count} employees are already in overtime.")
+    # Overtime
+    if "Overtime" in df.columns:
+        overtime_count = len(df[df["Overtime"] > 0])
+        insights.append(f"⚠ {overtime_count} employees are already in overtime.")
+    else:
+        insights.append("⚠ Column 'Overtime' not found in dataset.")
 
-    # near overtime
-    near_ot = len(df[(df["ActualHours"] >= 38) & (df["ActualHours"] <= 40)])
-    insights.append(f"⚠ {near_ot} employees are close to overtime threshold (38–40 hours).")
+    # Near overtime
+    if "ActualHours" in df.columns:
+        near_ot = len(df[(df["ActualHours"] >= 38) & (df["ActualHours"] <= 40)])
+        insights.append(f"⚠ {near_ot} employees are close to overtime threshold (38–40 hours).")
+    else:
+        insights.append("⚠ Column 'ActualHours' not found in dataset.")
 
-    # department overtime
-    dept_ot = df.groupby("Department")["Overtime"].sum().sort_values(ascending=False)
+    # Department overtime
+    if "Department" in df.columns and "Overtime" in df.columns:
+        dept_ot = df.groupby("Department")["Overtime"].sum().sort_values(ascending=False)
+        if len(dept_ot) > 0:
+            insights.append(f"⚠ {dept_ot.index[0]} department has the highest overtime workload.")
+    else:
+        insights.append("⚠ Cannot calculate department overtime (missing 'Department' or 'Overtime').")
 
-    if len(dept_ot) > 0:
-        insights.append(f"⚠ {dept_ot.index[0]} department has the highest overtime workload.")
-
-    # shift absenteeism
-    shift_abs = df.groupby("Shift")["AbsentDays"].sum().sort_values(ascending=False)
-
-    if len(shift_abs) > 0:
-        insights.append(f"⚠ {shift_abs.index[0]} shift has the highest absenteeism.")
+    # Shift absenteeism
+    if "Shift" in df.columns and "AbsentDays" in df.columns:
+        shift_abs = df.groupby("Shift")["AbsentDays"].sum().sort_values(ascending=False)
+        if len(shift_abs) > 0:
+            insights.append(f"⚠ {shift_abs.index[0]} shift has the highest absenteeism.")
+    else:
+        insights.append("⚠ Cannot calculate shift absenteeism (missing 'Shift' or 'AbsentDays').")
 
     return insights
-
 
 # -----------------------------
 # Data Source
@@ -87,36 +93,26 @@ if use_csv:
 
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-
         st.subheader("Uploaded Dataset Sample")
-
         sample_size = min(len(df),10)
         st.dataframe(df.sample(sample_size))
-
     else:
         st.warning("Please upload a CSV file")
         st.stop()
 
 else:
-
     df = simulate_workforce()
-
     st.subheader("Simulated Dataset Sample")
-
     sample_size = min(len(df),10)
     st.dataframe(df.sample(sample_size))
-
 
 # -----------------------------
 # AI Workforce Insights
 # -----------------------------
 st.subheader("AI Workforce Insights")
-
 insights = generate_ai_insights(df)
-
 for insight in insights:
     st.warning(insight)
-
 
 # -----------------------------
 # Chat Memory
@@ -128,7 +124,6 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-
 # -----------------------------
 # Chat Input
 # -----------------------------
@@ -136,10 +131,7 @@ question = st.chat_input("Ask a workforce analytics question")
 
 if question:
 
-    st.session_state.messages.append({
-        "role":"user",
-        "content":question
-    })
+    st.session_state.messages.append({"role":"user","content":question})
 
     with st.chat_message("user"):
         st.write(question)
@@ -149,12 +141,10 @@ if question:
         with st.spinner("Analyzing workforce data..."):
 
             try:
-
                 # -----------------------------
                 # Generate Pandas Query
                 # -----------------------------
                 prompt = f"""
-
 You are a Python data analyst.
 
 The dataframe name is df.
@@ -173,14 +163,11 @@ Rules:
 Examples:
 
 df["Overtime"].sum()
-
 df.groupby("Department")["Overtime"].sum()
-
 df[df["ActualHours"] > 45]
 
 User question:
 {question}
-
 """
 
                 response = client.chat.completions.create(
@@ -189,22 +176,12 @@ User question:
                 )
 
                 query = response.choices[0].message.content.strip()
-
-                # Clean query
                 query = query.replace("```python","").replace("```","")
 
                 lines = query.split("\n")
+                clean_lines = [line.strip() for line in lines if "df" in line]
 
-                clean_lines = []
-
-                for line in lines:
-                    if "df" in line:
-                        clean_lines.append(line.strip())
-
-                if clean_lines:
-                    query = clean_lines[0]
-                else:
-                    query = lines[-1].strip()
+                query = clean_lines[0] if clean_lines else lines[-1].strip()
 
                 # -----------------------------
                 # Execute Query Safely
@@ -216,25 +193,20 @@ User question:
                     st.stop()
 
                 # -----------------------------
-                # Display Results
+                # Display Result
                 # -----------------------------
                 if isinstance(result,(pd.DataFrame,pd.Series)):
-
                     st.dataframe(result)
 
                     if isinstance(result,pd.DataFrame) and len(result.columns) >= 2:
-
                         try:
                             fig, ax = plt.subplots()
                             result.plot(kind="bar", ax=ax)
                             st.pyplot(fig)
                         except:
                             pass
-
                     result_text = result.to_string()
-
                 else:
-
                     st.write(result)
                     result_text = str(result)
 
@@ -242,7 +214,6 @@ User question:
                 # AI Explanation
                 # -----------------------------
                 explain_prompt = f"""
-
 You are a workforce analytics assistant.
 
 User Question:
@@ -255,23 +226,16 @@ Provide:
 1. Short answer
 2. Explanation
 3. Key workforce insights
-
 """
-
                 explanation = client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[{"role":"user","content":explain_prompt}]
                 )
 
                 answer = explanation.choices[0].message.content
-
                 st.write(answer)
 
-                st.session_state.messages.append({
-                    "role":"assistant",
-                    "content":answer
-                })
+                st.session_state.messages.append({"role":"assistant","content":answer})
 
             except Exception as e:
-
                 st.error(f"Error: {e}")
