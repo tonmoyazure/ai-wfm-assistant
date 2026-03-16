@@ -5,17 +5,17 @@ import random
 import matplotlib.pyplot as plt
 from openai import OpenAI
 
-# ----------------------------
+# -----------------------------
 # OpenAI Setup
-# ----------------------------
+# -----------------------------
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.set_page_config(page_title="AI Workforce Copilot", layout="wide")
 st.title("AI Workforce Copilot")
 
-# ----------------------------
+# -----------------------------
 # Workforce Simulator
-# ----------------------------
+# -----------------------------
 def simulate_workforce(n=500):
 
     first_names = ["John","Maria","David","Lisa","Mark","Sophia","Daniel","Emma","Michael","Olivia"]
@@ -26,7 +26,7 @@ def simulate_workforce(n=500):
 
     rows = []
 
-    for i in range(1,n+1):
+    for i in range(1, n+1):
 
         scheduled = random.randint(35,45)
         actual = scheduled + random.randint(-5,10)
@@ -42,14 +42,12 @@ def simulate_workforce(n=500):
             "AbsentDays": random.randint(0,2)
         })
 
-    df = pd.DataFrame(rows)
-
-    return df
+    return pd.DataFrame(rows)
 
 
-# ----------------------------
+# -----------------------------
 # Data Source Selection
-# ----------------------------
+# -----------------------------
 st.sidebar.header("Data Source")
 
 use_csv = st.sidebar.checkbox("Upload CSV instead of simulator")
@@ -80,21 +78,20 @@ else:
     st.dataframe(df.sample(sample_size))
 
 
-# ----------------------------
+# -----------------------------
 # Chat Memory
-# ----------------------------
+# -----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
 
-# ----------------------------
+# -----------------------------
 # Chat Input
-# ----------------------------
+# -----------------------------
 question = st.chat_input("Ask a workforce analytics question")
 
 if question:
@@ -113,11 +110,10 @@ if question:
 
             try:
 
-                # ----------------------------
-                # Step 1: Generate Pandas Query
-                # ----------------------------
+                # -----------------------------
+                # Step 1: AI generates Pandas query
+                # -----------------------------
                 prompt = f"""
-
 You are a Python data analyst.
 
 The dataframe name is df.
@@ -125,13 +121,24 @@ The dataframe name is df.
 Columns:
 {list(df.columns)}
 
-Generate ONLY a Pandas query that answers the question.
+Return ONLY a valid Pandas query.
 
-Return ONLY python code.
+Rules:
+- Return ONE line of Python
+- No explanation
+- No markdown
+- No text
 
-Question:
+Examples:
+
+df["Overtime"].sum()
+
+df.groupby("Department")["Overtime"].sum()
+
+df[df["ActualHours"] > 45]
+
+User question:
 {question}
-
 """
 
                 response = client.chat.completions.create(
@@ -141,31 +148,41 @@ Question:
 
                 query = response.choices[0].message.content.strip()
 
-                # Clean query
+                # -----------------------------
+                # Clean Query
+                # -----------------------------
                 query = query.replace("```python","").replace("```","")
 
                 lines = query.split("\n")
-                query = lines[-1].strip()
 
-                # ----------------------------
-                # Step 2: Execute Query Safely
-                # ----------------------------
+                clean_lines = []
+
+                for line in lines:
+                    if "df" in line:
+                        clean_lines.append(line.strip())
+
+                if clean_lines:
+                    query = clean_lines[0]
+                else:
+                    query = lines[-1].strip()
+
+                # -----------------------------
+                # Execute Query Safely
+                # -----------------------------
                 try:
                     result = eval(query)
                 except Exception:
                     st.warning("AI generated an invalid query. Please rephrase your question.")
                     st.stop()
 
-                # ----------------------------
-                # Step 3: Display Result
-                # ----------------------------
+                # -----------------------------
+                # Display Result
+                # -----------------------------
                 if isinstance(result,(pd.DataFrame,pd.Series)):
 
                     st.dataframe(result)
 
-                    # ----------------------------
-                    # Chart generation
-                    # ----------------------------
+                    # Generate chart if possible
                     if isinstance(result,pd.DataFrame) and len(result.columns)>=2:
 
                         try:
@@ -175,7 +192,7 @@ Question:
 
                             st.pyplot(fig)
 
-                        except Exception:
+                        except:
                             pass
 
                     result_text = result.to_string()
@@ -186,11 +203,10 @@ Question:
 
                     result_text = str(result)
 
-                # ----------------------------
-                # Step 4: AI Explanation
-                # ----------------------------
+                # -----------------------------
+                # AI Explanation
+                # -----------------------------
                 explain_prompt = f"""
-
 You are a workforce analytics assistant.
 
 User Question:
@@ -203,7 +219,6 @@ Provide:
 1. Short answer
 2. Explanation
 3. Key workforce insights
-
 """
 
                 explanation = client.chat.completions.create(
@@ -221,4 +236,5 @@ Provide:
                 })
 
             except Exception as e:
+
                 st.error(f"Error: {e}")
