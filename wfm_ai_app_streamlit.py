@@ -8,7 +8,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.title("AI Workforce Copilot")
 
-# Load data
+# Load CSV
 df = pd.read_csv("workforce_data.csv")
 
 st.subheader("Workforce Data")
@@ -20,8 +20,8 @@ if st.button("Ask AI") and question:
 
     try:
 
-        # Ask AI to generate Pandas query
-        prompt = f"""
+        # Step 1: Generate Pandas query
+        query_prompt = f"""
         You are a Python data analyst.
 
         The dataframe name is df.
@@ -38,24 +38,28 @@ if st.button("Ask AI") and question:
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": query_prompt}]
         )
 
         query = response.choices[0].message.content.strip()
-
-        # Remove markdown if AI adds it
         query = query.replace("```python", "").replace("```", "").strip()
 
-        # Execute query silently
+        # Step 2: Execute query
         result = eval(query)
 
-        # Ask AI to explain result
+        # Convert result to readable text
+        if isinstance(result, pd.DataFrame) or isinstance(result, pd.Series):
+            result_text = result.to_string(index=False)
+        else:
+            result_text = str(result)
+
+        # Step 3: Ask AI to explain
         explain_prompt = f"""
-        A workforce analytics query returned this result:
+        The following workforce data result was produced:
 
-        {result}
+        {result_text}
 
-        Answer the user's question clearly and concisely.
+        Answer the user's question clearly.
 
         Question:
         {question}
