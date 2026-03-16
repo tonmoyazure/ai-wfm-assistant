@@ -26,27 +26,56 @@ def simulate_workforce(n=500):
 
     rows = []
 
-    for i in range(1, n+1):
+    for i in range(1,n+1):
 
         scheduled = random.randint(35,45)
         actual = scheduled + random.randint(-5,10)
 
         rows.append({
-            "EmployeeID": i,
-            "EmployeeName": f"{random.choice(first_names)} {random.choice(last_names)}",
-            "Department": random.choice(departments),
-            "Shift": random.choice(shifts),
-            "ScheduledHours": scheduled,
-            "ActualHours": actual,
-            "Overtime": max(0,actual-40),
-            "AbsentDays": random.randint(0,2)
+            "EmployeeID":i,
+            "EmployeeName":f"{random.choice(first_names)} {random.choice(last_names)}",
+            "Department":random.choice(departments),
+            "Shift":random.choice(shifts),
+            "ScheduledHours":scheduled,
+            "ActualHours":actual,
+            "Overtime":max(0,actual-40),
+            "AbsentDays":random.randint(0,2)
         })
 
     return pd.DataFrame(rows)
 
+# -----------------------------
+# AI Insight Engine
+# -----------------------------
+def generate_ai_insights(df):
+
+    insights = []
+
+    # overtime count
+    overtime_count = len(df[df["Overtime"] > 0])
+    insights.append(f"⚠ {overtime_count} employees are already in overtime.")
+
+    # near overtime
+    near_ot = len(df[(df["ActualHours"] >= 38) & (df["ActualHours"] <= 40)])
+    insights.append(f"⚠ {near_ot} employees are close to overtime threshold (38–40 hours).")
+
+    # department overtime
+    dept_ot = df.groupby("Department")["Overtime"].sum().sort_values(ascending=False)
+
+    if len(dept_ot) > 0:
+        insights.append(f"⚠ {dept_ot.index[0]} department has the highest overtime workload.")
+
+    # shift absenteeism
+    shift_abs = df.groupby("Shift")["AbsentDays"].sum().sort_values(ascending=False)
+
+    if len(shift_abs) > 0:
+        insights.append(f"⚠ {shift_abs.index[0]} shift has the highest absenteeism.")
+
+    return insights
+
 
 # -----------------------------
-# Data Source Selection
+# Data Source
 # -----------------------------
 st.sidebar.header("Data Source")
 
@@ -76,6 +105,17 @@ else:
 
     sample_size = min(len(df),10)
     st.dataframe(df.sample(sample_size))
+
+
+# -----------------------------
+# AI Workforce Insights
+# -----------------------------
+st.subheader("AI Workforce Insights")
+
+insights = generate_ai_insights(df)
+
+for insight in insights:
+    st.warning(insight)
 
 
 # -----------------------------
@@ -111,9 +151,10 @@ if question:
             try:
 
                 # -----------------------------
-                # Step 1: AI generates Pandas query
+                # Generate Pandas Query
                 # -----------------------------
                 prompt = f"""
+
 You are a Python data analyst.
 
 The dataframe name is df.
@@ -139,6 +180,7 @@ df[df["ActualHours"] > 45]
 
 User question:
 {question}
+
 """
 
                 response = client.chat.completions.create(
@@ -148,9 +190,7 @@ User question:
 
                 query = response.choices[0].message.content.strip()
 
-                # -----------------------------
-                # Clean Query
-                # -----------------------------
+                # Clean query
                 query = query.replace("```python","").replace("```","")
 
                 lines = query.split("\n")
@@ -171,27 +211,23 @@ User question:
                 # -----------------------------
                 try:
                     result = eval(query)
-                except Exception:
-                    st.warning("AI generated an invalid query. Please rephrase your question.")
+                except:
+                    st.warning("AI generated an invalid query. Please rephrase.")
                     st.stop()
 
                 # -----------------------------
-                # Display Result
+                # Display Results
                 # -----------------------------
                 if isinstance(result,(pd.DataFrame,pd.Series)):
 
                     st.dataframe(result)
 
-                    # Generate chart if possible
-                    if isinstance(result,pd.DataFrame) and len(result.columns)>=2:
+                    if isinstance(result,pd.DataFrame) and len(result.columns) >= 2:
 
                         try:
                             fig, ax = plt.subplots()
-
                             result.plot(kind="bar", ax=ax)
-
                             st.pyplot(fig)
-
                         except:
                             pass
 
@@ -200,13 +236,13 @@ User question:
                 else:
 
                     st.write(result)
-
                     result_text = str(result)
 
                 # -----------------------------
                 # AI Explanation
                 # -----------------------------
                 explain_prompt = f"""
+
 You are a workforce analytics assistant.
 
 User Question:
@@ -219,6 +255,7 @@ Provide:
 1. Short answer
 2. Explanation
 3. Key workforce insights
+
 """
 
                 explanation = client.chat.completions.create(
