@@ -3,7 +3,6 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
-# Read API key from environment variable
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.write("API Key Loaded:", os.getenv("OPENAI_API_KEY") is not None)
@@ -17,21 +16,30 @@ st.dataframe(df)
 question = st.text_input("Ask a workforce question")
 
 if st.button("Ask AI"):
-    data_text = df.to_string(index=False)
 
-    prompt = f"""
-    You are a workforce analytics assistant.
+    try:
+        data_text = df.to_string(index=False)
 
-    Workforce data:
-    {data_text}
+        prompt = f"""
+        You are a workforce analytics assistant.
 
-    Answer the question:
-    {question}
-    """
+        Workforce data:
+        {data_text}
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
+        Answer the question:
+        {question}
+        """
 
-    st.write(response.choices[0].message.content)
+        st.write("Calling OpenAI...")
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        st.write("Response received from OpenAI")
+
+        st.write(response.choices[0].message.content)
+
+    except Exception as e:
+        st.error(f"Error calling OpenAI: {e}")
