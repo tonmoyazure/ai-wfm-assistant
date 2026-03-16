@@ -3,6 +3,9 @@ import streamlit as st
 import pandas as pd
 from openai import OpenAI
 
+st.write("Files inside container:")
+st.write(os.listdir("."))
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.write("API Key Loaded:", os.getenv("OPENAI_API_KEY") is not None)
